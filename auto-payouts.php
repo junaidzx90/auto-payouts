@@ -57,8 +57,8 @@ register_activation_hook( __FILE__, 'activate_auto_payouts' );
 register_deactivation_hook( __FILE__, 'deactivate_auto_payouts' );
 
 // wp cron schedules
-add_filter( 'cron_schedules', 'spreadsheet_updater_twice_daily' );
-function spreadsheet_updater_twice_daily( $schedules ) {
+add_filter( 'cron_schedules', 'payouts_updater_twice_daily' );
+function payouts_updater_twice_daily( $schedules ) {
 	// Adds once weekly to the existing schedules.
 	$schedules['twice_daily'] = array(
 		'interval' => 12 * HOUR_IN_SECONDS,
