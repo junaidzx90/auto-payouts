@@ -71,15 +71,44 @@ if ( ! wp_next_scheduled( 'payouts_auto_paid' ) ) {
 	wp_schedule_event( time(), 'twice_daily', 'payouts_auto_paid');
 }
 
+function wcusage_adding_activity($event_id, $event, $info) {
+    $enable_activity_log = wcusage_get_setting_value('wcusage_enable_activity_log', '1');
+    if($enable_activity_log) {
+
+  		$event_id = sanitize_text_field($event_id);
+  		$event = sanitize_text_field($event);
+
+      	global $wpdb;
+  		$table_name = $wpdb->prefix . 'wcusage_activity';
+
+  		$wpdb->insert(
+  			$table_name,
+  			array(
+  				'event_id' => $event_id,
+  				'event' => $event,
+				'user_id' => get_current_user_id(),
+				'date' => current_time( 'mysql' ),
+				'info' => $info,
+  			)
+  		);
+  		$last_id = $wpdb->insert_id;
+  		return $last_id;
+    } else {
+      return 0;
+    }
+}
+
 // Cron functionality
 add_action( 'payouts_auto_paid', 'check_payouts_status' );
 function check_payouts_status(){
 	global $wpdb;
 	try {
-		$lists = $wpdb->get_results("SELECT id FROM {$wpdb->prefix}wcusage_payouts WHERE status = 'pending'");
-
+		$lists = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}wcusage_payouts WHERE status = 'pending'");
 		if($lists && !is_wp_error( $lists )){
 			foreach($lists as $list){
+				$userid = $list->userid;
+				$amount = $list->amount;
+
 				$table_name = $wpdb->prefix . 'wcusage_payouts';
 				$data = [ 'status' => 'paid' ];
 				$where = [ 'id' => $list->id ];
@@ -88,6 +117,8 @@ function check_payouts_status(){
 				$data2 = [ 'datepaid' => date('Y-m-d H:i:s') ];
 				$where2 = [ 'id' => $list->id ];
 				$wpdb->update( $table_name, $data2, $where2 );
+
+				wcusage_credit_create_payout($amount, $userid);
 			}
 		}
 	} catch (\Throwable $th) {
