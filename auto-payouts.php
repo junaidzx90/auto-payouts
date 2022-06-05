@@ -98,6 +98,28 @@ function wcusage_adding_activity($event_id, $event, $info) {
     }
 }
 
+add_action( "init", function(){
+	global $wpdb;
+	$lists = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}wcusage_payouts WHERE status = 'paid'");
+	if($lists && !is_wp_error( $lists )){
+		foreach($lists as $list){
+			$userid = $list->userid;
+			$couponid = $list->couponid;
+
+			$currentpending1 = get_post_meta( $couponid, 'wcu_text_pending_payment_commission', true );
+			
+			if($currentpending1 && $currentpending1 > 0) { 
+				update_post_meta( $couponid, 'wcu_text_pending_payment_commission', 0 );
+			}
+
+			$currentpending = get_user_meta( $userid, 'wcu_ml_pending_commission', true );
+			if($currentpending && $currentpending > 0) { 
+				update_user_meta( $userid, 'wcu_ml_pending_commission', 0 );
+			}
+		}
+	}
+} );
+
 // Cron functionality
 add_action( 'payouts_auto_paid', 'check_payouts_status' );
 function check_payouts_status(){
@@ -108,6 +130,7 @@ function check_payouts_status(){
 			foreach($lists as $list){
 				$userid = $list->userid;
 				$amount = $list->amount;
+				$couponid = $list->couponid;
 
 				$table_name = $wpdb->prefix . 'wcusage_payouts';
 				$data = [ 'status' => 'paid' ];
@@ -118,6 +141,24 @@ function check_payouts_status(){
 				$where2 = [ 'id' => $list->id ];
 				$wpdb->update( $table_name, $data2, $where2 );
 
+				if($couponid) {
+					$currentpending = get_post_meta( $couponid, 'wcu_text_pending_payment_commission', true );
+					if(!$currentpending) { $currentpending = 0; }
+						$newpending = $currentpending - $amount;
+					if($newpending < 0) { $newpending = 0; }
+						update_post_meta( $couponid, 'wcu_text_pending_payment_commission', $newpending );
+				} else {
+					if($userid) {
+						$currentpending = get_user_meta( $userid, 'wcu_ml_pending_commission', true );
+						if(!$currentpending) { $currentpending = 0; }
+							$newpending = $currentpending - $amount;
+						if($newpending < 0) { $newpending = 0; }
+						update_user_meta( $userid, 'wcu_ml_pending_commission', $newpending );
+					}
+				}
+
+				$activity_log = wcusage_adding_activity($id, 'payout_paid', $amount);
+				  
 				wcusage_credit_create_payout($amount, $userid);
 			}
 		}
